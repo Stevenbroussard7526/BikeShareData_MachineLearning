@@ -1,0 +1,451 @@
+---
+title: "Machine_learning Project"
+output: html_document
+date: "2022-11-09"
+---
+
+
+Download and name the data-set
+```{r}
+bikedf1 = read.csv("Capital Bike Sharing data by hour.csv")
+```
+Install necessary packages
+```{r}
+#Install Packages
+install.packages("naniar")
+install.packages("corrplot")
+install.packages("GGally")
+install.packages("lubridate")
+install.packages("psych")
+install.packages("ggcorrplot")
+install.packages("PerformanceAnalytics")
+install.packages("sjPlot")
+install.packages("fastDummies")
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(kableExtra)
+library(naniar)
+library(ggplot2)
+library(gridExtra)
+library(corrplot)
+library(GGally)
+library(stringr)
+library(lubridate)
+library(scales)
+library(graphics)
+library(caret)
+library(psych)
+library(ggcorrplot)
+library(PerformanceAnalytics)
+library(fastDummies)
+```
+```{r, fig.subcap=Factoring Data}
+#Transforming the Month variables from numerical variables to characters
+bikedf1$mnth= factor(bikedf1$mnth, labels = c("Jan","Feb","Mar","Apr","May","June","July","Aug","Sept","Oct","Nov","Dec"))
+#season_mapping=c("Winter", "Spring", "Summer", "Fall")
+#bikedf$season<- season_mapping[bikedf$season]
+
+#Transforming the Season variables from numerical variables to characters
+bikedf1$season= factor(bikedf1$season, labels = c("Winter","Spring","Summer","Fall"))
+#bikedf$mnth= month.name[bikedf$mnth]
+#str(bikedf)
+
+#Transforming the Year variables from numerical variables to characters
+bikedf1$yr= factor(bikedf1$yr, labels = c("2011","2012"))
+
+#Transforming the Hour variables from numerical variables to characters
+bikedf1$hr= factor(bikedf1$hr, labels = c("12AM", "1Am","2AM","3AM","4AM","5AM","6AM","7AM","8AM","9AM","10AM","11AM","12N","1PM","2PM","3PM","4PM","5PM","6PM","7PM","8PM","9PM","10PM","11PM"))
+
+
+#Transforming the WeekDay variables from numerical variables to characters
+bikedf1$weekday= factor(bikedf1$weekday, labels = c("Sun","Mon","Tues","Wed","Thurs","Friday","Sat"))
+
+#Transforming the Holiday variables from numerical variables to characters
+bikedf1$holiday= factor(bikedf1$holiday, labels = c("Not Holiday","Holiday"))
+
+#Transforming the Working Day variables from numerical variables to characters
+bikedf1$workingday= factor(bikedf1$workingday, labels = c("Not Working Day","Working Day"))
+
+#Transforming the Weather variables from numerical variables to characters
+
+bikedf1$weathersit= factor(bikedf1$weathersit, labels = c("Clear-Cloudy","Misty","Light Snow/Rain","Heavy Rain-Snow"))
+
+#removing the date because it is already represented in the dataset by month and year
+#removing casual because it is already factored into cnt 
+#removing registered because it is already factored into cnt 
+#removing instant because it is just an index for the dataset and is pretty useless- it's just counting rows
+bikedf1 <- bikedf1[, -which(names(bikedf1) == "dteday")]
+bikedf1 <- bikedf1[, -which(names(bikedf1) == "instant")]
+bikedf1 <- bikedf1[, -which(names(bikedf1) == "casual")]
+bikedf1 <- bikedf1[, -which(names(bikedf1) == "registered")]
+```
+
+```{r}
+#Creating Dummy variables 
+bikedf2= dummy_cols(bikedf1,select_columns = c("season","yr","mnth","hr","holiday","weekday","workingday","weathersit"), remove_first_dummy = T)%>%
+  dplyr::select(-c("season","yr","mnth","hr","holiday","weekday","workingday","weathersit"))
+
+#checking to see if there are any missing variables 
+miss_var_summary(bikedf2)
+```
+
+```{r, Summary stats}
+
+
+#creating the summary
+summary(bikedf2)
+
+```
+
+```{r, creating a histogram}
+ggplot(data = bikedf2, aes(x = cnt)) +
+  geom_histogram(fill = '#336699', color = "black", bins = 50) +
+  labs(title = "Histogram of How Many Bikes are Rented", x = "Rented Bikes", y = "Frequency") +
+  theme_minimal()
+```
+
+
+```{r}
+# Calculating correlations of continuous variables with SalePrice
+continuous_vars <- bikedf2 %>% select_if(is.numeric)
+correlations <- cor(continuous_vars)
+cnt_correlations <- correlations['cnt',]
+cnt_correlations_df <- data.frame(Variable = names(cnt_correlations), 
+                                  Correlation = cnt_correlations) %>%
+arrange(desc(Correlation))
+
+# Plotting these correlations
+ggplot(data = cnt_correlations_df, aes(x = reorder(Variable, Correlation), y = Correlation)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Correlation of Continuous Variables with Cnt", x = "", y = "Correlation") +
+  theme_minimal()
+```
+
+Split train and test data (70:30)
+```{r}
+sample_index <- sample(seq_len(nrow(bikedf2)), size = 0.7 *
+    nrow(bikedf2))
+train <- bikedf2[sample_index, ]
+test <- bikedf2[-sample_index, ]
+dim(train)
+dim(test)
+```
+
+```{r}
+#simple linear model
+model1 <- lm(cnt ~ ., data = train)
+summary(model1)
+
+plot(model1)
+```
+
+
+```{r}
+#Regression Diagnostic
+plot(model1)
+
+CheckNormal=function(model){
+  hist(model$residuals,breaks=30)
+  shaptest=shapiro.test(sample(model$residuals,4000))
+  print(shaptest)
+  skewness(model$residuals)
+  if(shaptest$p.value==.05){
+    print("H0 rejected : the residuals are Not distributed normally")
+   } else{
+      print("H0 failed to reject : the residuals Are distributed normally")
+    }
+}
+
+```
+```{r setup, include=T}
+#multiple linear regression model
+model2 <- lm(cnt ~ +temp+hum+season_Spring+season_Summer+season_Fall+yr_2012+hr_1Am+hr_2AM+hr_3AM+hr_4AM+hr_5AM+hr_6AM+hr_7AM+hr_8AM+hr_9AM+hr_10AM+hr_11AM+hr_12N+hr_1PM+hr_2PM+hr_3PM+hr_4PM+hr_5PM+hr_6PM+hr_7PM+hr_8PM+hr_9PM+hr_10PM+hr_11PM, data = train) # Land.Slope
+
+summary(model2)
+plot(model2)
+
+CheckNormal=function(model){
+  hist(model$residuals,breaks=30)
+  shaptest=shapiro.test(sample(model2$residuals,4000))
+  print(shaptest)
+  skewness(model$residuals)
+  if(shaptest$p.value==.05){
+    print("H0 rejected : the residuals are Not distributed normally")
+   } else{
+      print("H0 failed to reject : the residuals Are distributed normally")
+   }
+}
+
+CheckNormal(model= model1) #Normality Rejected
+
+plot(model2)
+```
+
+```{r}
+model3 <- lm(cnt ~ +temp+hum+hr_1Am+hr_2AM+hr_3AM+hr_4AM+hr_5AM+hr_6AM+hr_7AM+hr_8AM+hr_9AM+hr_10AM+hr_11AM+hr_12N+hr_1PM+hr_2PM+hr_3PM+hr_4PM+hr_5PM+hr_6PM+hr_7PM+hr_8PM+hr_9PM+hr_10PM+hr_11PM, data = train) # Land.Slope
+
+summary(model3)
+plot(model3)
+
+# summary(model3)
+stargazer::stargazer(model2,model3, type = "text", title = "Linear Regression Models", ci=FALSE, single.row = TRUE, no.space = FALSE, align = TRUE, digits=5, font.size = "small",  report = "vc*stp")
+
+plot(model3)
+```
+
+```{r}
+model3A=lm(log(cnt)~temp+hum+hr_1Am+hr_2AM+hr_3AM+hr_4AM+hr_5AM+hr_6AM+hr_7AM+hr_8AM+hr_9AM+hr_10AM+hr_11AM+hr_12N+hr_1PM+hr_2PM+hr_3PM+hr_4PM+hr_5PM+hr_6PM+hr_7PM+hr_8PM+hr_9PM+hr_10PM+hr_11PM,data=train)
+summary(model3A) 
+CheckNormal(model3A)
+skewness(model3A$residuals)
+plot(model3A)
+vif(model3A)
+##########################
+model3B=lm(sqrt(cnt)~temp+hum+hr_1Am+hr_2AM+hr_3AM+hr_4AM+hr_5AM+hr_6AM+hr_7AM+hr_8AM+hr_9AM+hr_10AM+hr_11AM+hr_12N+hr_1PM+hr_2PM+hr_3PM+hr_4PM+hr_5PM+hr_6PM+hr_7PM+hr_8PM+hr_9PM+hr_10PM+hr_11PM,data=train)
+summary(model3B)
+skewness(model3B$residuals)
+plot(model3B)
+##########################
+model3C=lm((cnt)^1/3~temp+hum+hr_1Am+hr_2AM+hr_3AM+hr_4AM+hr_5AM+hr_6AM+hr_7AM+hr_8AM+hr_9AM+hr_10AM+hr_11AM+hr_12N+hr_1PM+hr_2PM+hr_3PM+hr_4PM+hr_5PM+hr_6PM+hr_7PM+hr_8PM+hr_9PM+hr_10PM+hr_11PM,data=train)
+summary(model3C)
+skewness(model3C$residuals)
+plot(model3C)
+
+
+```
+
+```{r}
+calculate_test_metrics <- function(model1, model3A, test_y, test_y_pred1, test_y_pred2) {
+  test_metrics_df <- data.frame(matrix(ncol = 4, nrow = 2))
+  colnames(test_metrics_df) <- c("adj-R2", "MAE", "MSE", "RMSE")
+  rownames(test_metrics_df) <- c("Model 1", "Model 2")
+  
+  test_metrics_df[1, 1] <- summary(model1)$adj.r.squared
+  test_metrics_df[2, 1] <- summary(model3A)$adj.r.squared
+  
+  test_metrics_df[1, 2] <- MAE(test_y_pred1, test_y)
+  test_metrics_df[2, 2] <- MAE(test_y_pred2, test_y)
+  
+  test_metrics_df[1, 3] <- MSE(test_y_pred1, test_y)
+  test_metrics_df[2, 3] <- MSE(test_y_pred2, test_y)
+  
+  test_metrics_df[1, 4] <- RMSE(test_y_pred1, test_y)
+  test_metrics_df[2, 4] <- RMSE(test_y_pred2, test_y)
+  
+  return(test_metrics_df)
+}
+
+# Generate predictions for test data using model4 and model5
+test$y_predict1 <- predict(model1, newdata = test)
+test$y_predict2 <- predict(model3A, newdata = test)
+
+# Extract the test target variable and predicted values
+test_y <- test$cnt
+test_y_pred1 <- test$y_predict1
+test_y_pred2 <- test$y_predict3A
+
+## Calculate evaluation metrics for test data
+test_metrics_df <- calculate_test_metrics(model1, model3A, test_y, test_y_pred1, test_y_pred2)
+test_metrics_df %>% kable("text") %>%
+ kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),full_width = FALSE)
+```
+
+```{r}
+
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+
+m.ols <- lm(cnt ~ 1, data=train)
+ols_summ <- summary(m.ols)
+
+tab_model(m.ols)
+```
+
+```{r}
+library(MASS)
+bc <- boxcox(m.ols)
+
+str(bc)
+bc.power <- bc$x[which.max(bc$y)]
+bc.power
+
+BCTransform <- function(y, lambda=0) {
+  if (lambda == 0L) { log(y) }
+  else { (y^lambda - 1) / lambda }
+}
+train$cnt.bc <- BCTransform(train$cnt, bc.power)
+test$cnt.bc <- BCTransform(test$cnt, bc.power)
+
+```
+
+```{r}
+fit2_bc <- lm(cnt.bc~.-windspeed-atemp-weathersit-workingday, data=train)
+fit2_bc_summ <- summary(fit2_bc)
+fit2_bc_summ
+
+plot(fit1)
+plot(fit2_bc)
+library(car)
+vif(fit2_bc)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+Check Data for Missing Value
+```{r}
+library(tidyverse)
+X.train_bike %>% is.na()%>% colSums()
+X.train_bike=unique(X.train_bike)
+
+```
+
+Scatter plots, correlation values and histograms
+```{r}
+# select numeric variables
+train_numeric <- dplyr::select_if(X.train_bike, is.numeric)
+# calculate the correlations
+cc2<- cor(train_numeric)
+cc2
+
+
+#Create Correlation Table
+
+#install.packages("ggcorrplot")
+library(ggcorrplot)
+ggcorrplot(cc2, hc.order = TRUE, 
+           type = "lower",
+           lab = TRUE,
+           )
+
+
+```
+Model Building (Model 1)
+```{r}
+#Removed season, temp,registered and holiday from set to avoid Multi-collinearity
+model1=lm(cnt~atemp+hr+yr+windspeed+weathersit+hum,data=X.train_bike)
+summary(model1)
+
+```
+Model Building (Model 2)
+```{r}
+#Removed season, temp,registered and holiday from set to avoid Multi-collinearity
+model2=lm(cnt~atemp+hr+yr+hum,data=X.train_bike)
+summary(model2)
+```
+
+
+
+Check Normality
+```{r}
+CheckNormal=function(model){
+  hist(model$residuals,breaks=30)
+  shaptest=shapiro.test(sample(model$residuals,4000))
+  print(shaptest)
+  skewness(model$residuals)
+  if(shaptest$p.value==.05){
+    print("H0 rejected : the residuals are Not distributed normally")
+   } else{
+      print("H0 failed to reject : the residuals Are distributed normally")
+    }
+}
+ CheckNormal(model=model2) #Normality Rejected
+  
+```
+Create Normality Tables
+```{r}
+model3A=lm(log(cnt)~atemp+hr+yr,data=X.train_bike)
+summary(model3A) 
+CheckNormal(model3A)
+skewness(model3A$residuals)
+##########################
+model3B=lm(sqrt(cnt)~atemp+hr+yr,data=X.train_bike)
+summary(model3B)
+skewness(model3B$residuals)
+##########################
+model3C=lm((cnt)^1/3~atemp+hr+yr,data=X.train_bike)
+summary(model3C)
+skewness(model3C$residuals)
+
+
+
+
+```
+#CHECK HOMOSCEDASTICITY (Constant errors)
+```{r}
+install.packages("lmtest")
+library(lmtest)
+CheckHomos <- function(model){
+plot(model$fitted.values, model$residuals)
+abline(h = 0, col = "red")
+BP <- bptest(model)
+print(BP)
+if (BP$p.value <= 0.05) {
+print("H0 rejected: Error variance spreads INCONSTANTLY/generating patterns (Heteroscedasticity)")
+} else {
+print("H0 failed to reject: Error variance spreads CONSTANTLY (Homoscedasticity)")
+}
+}
+CheckHomos(model = model3A) #Fail Homo
+
+```
+Fixing Homoscedasticy (Weighted Least squared)
+```{r}
+library(MASS)
+wt=1/lm(abs(model2$residuals)~model2$fitted.values)$fitted.values^2
+##Perform weighted least squared regression
+model4=lm(log(cnt)~atemp+hr+yr,data=X.train_bike,weights=wt)
+summary(model4)
+CheckHomos(model = model4)
+
+
+
+```
+Checking for Multi-collinearity
+```{r cars}
+#Check Variance Inflation factor (Checks for mult-collinearity)
+library(car)
+vif(model4)
+```
+Testing for Linearity
+```{r}
+
+model5=lm(log(cnt)~atemp+hr+yr,data=X.train_bike,weights=wt)
+summary(model5)
+CheckHomos(model = model5)
+
+plot(model5)
+```
+```{r}
+#Check outliers and influential observations
+library(ggplot2)
+library(tidyverse)
+#install.packages("ggplot2")
+par(mfrow=c(2,2)) # Change the panel layout to 2 x 2 
+lapply(c(1,2,4,5), # showing 4 types of plots
+function(x) plot(model5, 
+which = x, 
+# labels.id = 1:nrow(train),
+cook.levels = c(0.05, 0.1))) %>% invisible()
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
